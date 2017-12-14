@@ -53,6 +53,7 @@ class NesEnv(gym.Env, utils.EzPickle):
         self.subprocess = None
         self.no_render = True
         self.viewer = None
+        self.numReset = 0
 
         # Pipes
         self.pipe_name = ''
@@ -181,6 +182,7 @@ class NesEnv(gym.Env, utils.EzPickle):
         self.is_exiting = 0
 
     def _launch_fceux(self):
+        
         # Making sure ROM file is valid
         if '' == self.rom_path or not os.path.isfile(self.rom_path):
             raise gym.error.Error('Unable to find ROM. Please download the game from the web and configure the rom path by ' +
@@ -341,7 +343,14 @@ class NesEnv(gym.Env, utils.EzPickle):
         return state, reward, is_finished, info
 
     def _reset(self):
+        print("calling parent reset")
+##        if self.numReset == 0:
+##            self.numReset += 1
+##        else:
+##            return
+        
         if 1 == self.is_initialized:
+            print("want to close")
             self.close()
         self.last_frame = 0
         self.reward = 0
@@ -350,7 +359,9 @@ class NesEnv(gym.Env, utils.EzPickle):
         self.first_step = True
         self._reset_info_vars()
         with self.lock:
+            #if self.numReset == 0:
             self._launch_fceux()
+            #    self.numReset = 1
             self._closed = False
             self._start_episode()
         self.screen = np.zeros(shape=(self.screen_height, self.screen_width, 3), dtype=np.uint8)
@@ -641,6 +652,8 @@ class MetaNesEnv(NesEnv):
         # Reset is called on first step() after level is finished
         # or when change_level() is called. Returning if neither have been called to
         # avoid resetting the level twice
+        print("calling subclass reset")
+
         if self.find_new_level:
             return
 
@@ -650,6 +663,10 @@ class MetaNesEnv(NesEnv):
         self.is_finished = False
         self._reset_info_vars()
         if 0 == self.is_initialized:
+##            if self.numReset == 0:
+##                self.numReset += 1
+##            else:
+##                return
             self._launch_fceux()
             self._closed = False
         self._start_episode()

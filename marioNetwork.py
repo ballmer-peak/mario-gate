@@ -4,19 +4,47 @@ import random
 import gym
 import gym_pull
 import numpy as np
+import math
 
 
-numNeurons = 20
-NUM_ACTIONS = 6
+numNeurons = 100
+#NUM_ACTIONS = 6
+NUM_ACTIONS = 9
 learningRate = 0.02
 #LEARNING_RATE = 0.01
 
+
+def getMoveMap():
+    default = [0] * 6
+    last = [0] * 3
+    movemap = {
+        tuple(default + [1, 0, 0]): [0, 0, 0, 1, 1, 0],
+        tuple(default + [0, 1, 0]): [0, 0, 0, 1, 0, 1],
+        tuple(default + [0, 0, 1]): [0, 0, 0, 1, 1, 1],
+        tuple(default + last): default,
+        tuple([1] + ([0] * 5) + last): [1] + ([0] * 5),
+        tuple([0, 1] + ([0] * 4) + last): [0, 1] + ([0] * 4),
+        (0, 0, 1, 0, 0, 0, 0, 0, 0): [0, 0, 1, 0, 0, 0],
+        (0, 0, 0, 1, 0, 0, 0, 0, 0): [0, 0, 0, 1, 0, 0],
+        tuple(([0] * 4) + [1, 0] + last): ([0] * 4) + [1, 0],
+        tuple(([0] * 5) + [1] + last): ([0] * 5) + [1]
+    }
+    return movemap
 
 
 def createMarioNetwork():
 ##    startState = sum(row for row in startState, [])
 ##    endState = sum(row for row in endState, [])
 
+
+    #[up, left, down, right, A, B]
+    moveMap = getMoveMap()
+    stepCount = 0
+    gamma = 0.99
+    lastUpdateTime = float("inf")
+    lastDistance = -1
+    
+    
 
     env = gym.make("ppaquette/SuperMarioBros-1-1-Tiles-v0")
     state = env.reset()
@@ -85,12 +113,30 @@ def createMarioNetwork():
 ##    state = env.reset()
     
     reward = 0
+    observation, reward, done, info = env.step(env.action_space.sample())
 
     while(True):
-        observation, reward, done, info = env.step(env.action_space.sample())
+        
+        stepCount += 1
+        if (info["distance"] - lastDistance) > 1:
+            lastTime = info["time"]
+        else:
+            print(info["time"], " - ", lastTime)
+            if abs(info["time"] - lastTime) > 10:
+                done = True
+
+        lastDistance = info["distance"]
+        #print(info)
+        
+        
         if(done):
-            print("\n\nWE DEAD\n\n")
+            #print("\n\nWE DEAD\n\n")
+            #env.render(close=True)
             env.reset()
+            done = False
+            lastTime = 400
+            lastDistance = -1
+            continue
 ##
 ##        print("state is: ", state)
 ##        print("type: ", type(state))
@@ -111,11 +157,20 @@ def createMarioNetwork():
         predictedMove = sess.run(predictions, feed_dict = {inputLayer : state})
         predictedMove = predictedMove[0]
         #print("predicted move is:", predictedMove)
+        print("predicted move: ", predictedMove)
         
         argmaxIndex = getMaxIndex(predictedMove)
-        marioMove = [0] * 6
+        marioMove = [0] * NUM_ACTIONS
         marioMove[argmaxIndex] = 1 # TODO: NEED TO INCLUDE MAPPING OF COMBINATION MOVES
+
+
         
+        marioMove = moveMap[tuple(marioMove)]
+
+        
+        
+        
+        print("marioMove: ", marioMove)
         nextState, nextReward, done, info = env.step(marioMove)
         
         
@@ -130,7 +185,9 @@ def createMarioNetwork():
         #get the subset of experiences
         indices = set()
         #print("about to hit this while loop")
-        while len(indices) < (int(len(experiences) * .25)):
+        #print("num subset experiences:", int(len(experiences) * .25))
+        n = int(len(experiences) * .25 if len(experiences) < 50 else 50)
+        while len(indices) < n:
             indices.add(random.randint(0, len(experiences)-1))
         #print("\n\n indices:", indices)
         #print("size of experiences:", len(experiences))
@@ -162,7 +219,16 @@ def createMarioNetwork():
             
             
             nqMaxIndex = getMaxIndex(nQ_QVal)
+            
             nQ_QVal[maxIndex] = nQ_QVal[nqMaxIndex]
+
+            gamma = 0.75
+            
+            nQ_QVal[maxIndex] = nQ_QVal[maxIndex] * (1/gamma)
+
+            #if stepCount % 50 == 0:
+#                gamma = gamma * 0.99
+            
 
             
             maskCurQ = getMask(len(q_QVal), maxIndex)
@@ -191,7 +257,7 @@ def getMask(length, index):
             
 
 def getReward(maxIndex, length, r):
-    print("maxIndex is: ", maxIndex, "length is:", length, "r is:", r)
+    #print("maxIndex is: ", maxIndex, "length is:", length, "r is:", r)
     reward = [0] * length
     
     reward[maxIndex] = r
