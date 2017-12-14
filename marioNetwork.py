@@ -6,11 +6,13 @@ import gym_pull
 import numpy as np
 import math
 
+# if the push worked this line will be here ;)
 
 numNeurons = 100
 #NUM_ACTIONS = 6
 NUM_ACTIONS = 9
-learningRate = 0.02
+learningRate = 0.001
+#learning rate = 0.0001
 #LEARNING_RATE = 0.01
 
 
@@ -43,6 +45,7 @@ def createMarioNetwork():
     gamma = 0.99
     lastUpdateTime = float("inf")
     lastDistance = -1
+    epsilon = 0.99
     
     
 
@@ -118,6 +121,12 @@ def createMarioNetwork():
     while(True):
         
         stepCount += 1
+        if stepCount % 50 == 0:
+                epsilon = epsilon * 0.99
+                print("decreasing epsilon....")
+
+
+        
         if (info["distance"] - lastDistance) > 1:
             lastTime = info["time"]
         else:
@@ -158,11 +167,13 @@ def createMarioNetwork():
         predictedMove = predictedMove[0]
         #print("predicted move is:", predictedMove)
         print("predicted move: ", predictedMove)
-        
-        argmaxIndex = getMaxIndex(predictedMove)
-        marioMove = [0] * NUM_ACTIONS
-        marioMove[argmaxIndex] = 1 # TODO: NEED TO INCLUDE MAPPING OF COMBINATION MOVES
 
+        # want to get epsilon greedy index
+        selectedIndex = selectIndex(predictedMove, epsilon)
+ #       argmaxIndex = getMaxIndex(predictedMove)
+        marioMove = [0] * NUM_ACTIONS
+        marioMove[selectedIndex] = 1 # TODO: NEED TO INCLUDE MAPPING OF COMBINATION MOVES
+        print("marioMove before moveMap:", marioMove)
 
         
         marioMove = moveMap[tuple(marioMove)]
@@ -177,7 +188,7 @@ def createMarioNetwork():
  #       nextState = sum([row for row in nextState], [])
         nextState = np.reshape(nextState, (1, 208))
         
-        ex = (state, getZeroedOutArr(predictedMove), getReward(argmaxIndex, len(predictedMove), reward), nextState, argmaxIndex)
+        ex = (state, selectedIndex, getReward(selectedIndex, len(predictedMove), reward), nextState)
         experiences.append(ex)
 
         state = nextState
@@ -200,6 +211,7 @@ def createMarioNetwork():
         for experience in subset:
             # extract s, st+1, action, and reward
             q = experience[0]
+            a = experience[1]
             r = experience[2]
             nQ = experience[3]
             #maxIndex = experience[4]
@@ -215,23 +227,27 @@ def createMarioNetwork():
             q_QVal = sess.run(predictions, feed_dict = {inputLayer : q})
             
             q_QVal = q_QVal[0]
-            maxIndex = getMaxIndex(q_QVal)
+            #maxIndex = getMaxIndex(q_QVal)
+            actionIndex = experience[1]
+            # want to get q value at index of action we actually took
             
-            
+            # dont want to do epsilon greedy here
             nqMaxIndex = getMaxIndex(nQ_QVal)
             
-            nQ_QVal[maxIndex] = nQ_QVal[nqMaxIndex]
+            nQ_QVal[actionIndex] = nQ_QVal[nqMaxIndex]
 
-            gamma = 0.75
+            gamma = 0.99 # adam says to not even decrease gamma
             
-            nQ_QVal[maxIndex] = nQ_QVal[maxIndex] * (1/gamma)
+            nQ_QVal[actionIndex] = nQ_QVal[actionIndex] * (gamma)
+
+            
 
             #if stepCount % 50 == 0:
 #                gamma = gamma * 0.99
             
 
             
-            maskCurQ = getMask(len(q_QVal), maxIndex)
+            maskCurQ = getMask(len(q_QVal), actionIndex)
 ##            print("about to run trainer")
 ##            print("r is:", r)
 ##            print("maskCurQ: ", maskCurQ)
@@ -245,10 +261,24 @@ def createMarioNetwork():
             
             
             sess.run(trainer, feed_dict = {curMask : maskCurQ, rewardTensor : r, inputLayer : q, nextQ : nQ_QVal}) #training
-              
-
-
             
+
+
+
+def selectIndex(arr, epsilon):
+    # get a random number between (0, 1)
+    # check if random number >= epsilon
+    # if it is, do the max Index
+    # if it is now do a random action
+    randNum = random.uniform(0, 1)
+    if randNum < epsilon:
+        randomIndex = random.randint(0, NUM_ACTIONS - 1)
+        return randomIndex
+    else:
+        return getMaxIndex(arr)
+        
+        
+    
 
 def getMask(length, index):
     mask = [0] * length
@@ -265,6 +295,7 @@ def getReward(maxIndex, length, r):
     return reward
         
 def getMaxIndex(arr):
+    
     return list(arr).index(max(arr))
 
               
